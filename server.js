@@ -113,30 +113,29 @@ const telefone = data.phone;
 
       await enviarMensagem(telefone, `🎉 Bem-vindo(a) 👋
 
-Você ganhou um desconto exclusivo da ExpoPrint!`);
+Você quer conhecer melhor este produto?`);
 
       await delay(1500);
 
       await enviarMensagem(telefone, `🎁 Seu cupom:
 
-CUPOM EXPOPRINT10`);
+ALÉM DO CUPOM DE DESCONTO: RETORNEZAP10`);
 
       await delay(1500);
 
       await enviarMensagem(telefone, `📍 Digite:
-1️⃣ Promoções
-2️⃣ Catálogo
-3️⃣ Atendimento`);
+1️⃣ Quero conhecer melhor o sistema
+2️⃣ Quero adquirir o sistema
+3️⃣ Falar com comercial`);
     }
 
     // 🤖 MENU
     if (mensagem === "1") {
-      await enviarMensagem(telefone, `🔥 Promoções disponíveis`);
+      await enviarMensagem(telefone, `🔥 Sistema incrivel de Captação de Leads (clientes não cadastrados)`);
     }
 
     if (mensagem === "2") {
-      await enviarMensagem(telefone, `📘 Catálogo:
-https://seudominio.com/catalogo`);
+      await enviarMensagem(telefone, `📘 Menos de R$ 1,00 real por dia, valor mensal R$ 29,90`);
     }
 
     if (mensagem === "3") {
