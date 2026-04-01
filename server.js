@@ -183,26 +183,28 @@ app.post("/webhook", async (req, res) => {
   try {
     const data = req.body;
 
+    const telefone = data.telefone || data.phone || data.from;
+
     if (!data.phone) {
       console.log("❌ Telefone não encontrado");
       return;
     }
-
-    const telefone = data.telefone || data.phone || data.from;
 
 if (!telefone) {
   console.log("❌ Telefone não encontrado");
   return;
 }
     const mensagem = (
-      data.text?.message ||
-      data.text ||
-      data.message ||
-      data.body ||
-      ""
-    ).toLowerCase().trim();
+  data.texto?.mensagem ||
+  data.text?.message ||
+  data.text ||
+  data.message ||
+  data.body ||
+  ""
+).toLowerCase().trim();
 
-    console.log("📩 Recebido:", telefone, mensagem);
+    console.log("📞 Telefone:", telefone);
+    console.log("💬 Mensagem:", mensagem);
 
     const { campanha, nome, bairro } = extrairDados(mensagem);
 
