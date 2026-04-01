@@ -5,26 +5,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔥 CONFIG FIREBASE
-const getFirebaseUrl = (empresa) =>
-  `https://firestore.googleapis.com/v1/projects/papmensage-27a3e/databases/(default)/documents/empresas/${empresa}/clientes`;
+/**
+ * ==============================
+ * 🔧 CONFIGURAÇÕES
+ * ==============================
+ */
 
-// 🔥 CONFIG Z-API
+// 🔥 Firebase (PROJETO POLÍTICO)
+const FIREBASE_PROJECT = "saas-politico-6ed76";
+
+// 🔥 Z-API
 const ZAPI_INSTANCE = process.env.ZAPI_INSTANCE;
 const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
 const CLIENT_TOKEN = process.env.CLIENT_TOKEN;
 
-// 🔥 VALIDAÇÃO
+// 🔥 Validação de ambiente
 if (!ZAPI_INSTANCE || !ZAPI_TOKEN || !CLIENT_TOKEN) {
   console.error("❌ Variáveis de ambiente não configuradas");
 }
 
-// 🔥 DELAY
+/**
+ * ==============================
+ * 🔗 FIREBASE
+ * ==============================
+ */
+
+const getFirebaseUrl = (campanha) =>
+  `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/campanhas/${campanha}/eleitores`;
+
+/**
+ * ==============================
+ * ⏱️ UTIL
+ * ==============================
+ */
+
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 🔥 ENVIO WHATSAPP
+/**
+ * ==============================
+ * 📤 ENVIO WHATSAPP
+ * ==============================
+ */
+
 async function enviarMensagem(telefone, texto) {
   try {
     const response = await fetch(
@@ -44,30 +68,132 @@ async function enviarMensagem(telefone, texto) {
 
     const result = await response.text();
 
-    console.log("📤 Enviando para:", telefone);
-    console.log("📤 Mensagem:", texto);
-    console.log("📤 Resposta Z-API:", result);
+    console.log("📤 Enviado para:", telefone);
+    console.log("📤 Msg:", texto);
+    console.log("📤 Z-API:", result);
 
   } catch (err) {
-    console.error("Erro ao enviar mensagem:", err);
+    console.error("❌ Erro ao enviar mensagem:", err);
   }
 }
 
-// 🔥 WEBHOOK
+/**
+ * ==============================
+ * 💾 SALVAR ELEITOR
+ * ==============================
+ */
+
+async function salvarEleitor({ telefone, campanha, nome, bairro }) {
+  try {
+    await fetch(getFirebaseUrl(campanha), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        fields: {
+          telefone: { stringValue: telefone },
+          campanha: { stringValue: campanha },
+          nome: { stringValue: nome },
+          bairro: { stringValue: bairro },
+          origem: { stringValue: "whatsapp" },
+          data: { timestampValue: new Date().toISOString() }
+        }
+      })
+    });
+
+    console.log("✅ Eleitor salvo:", telefone);
+
+  } catch (err) {
+    console.error("❌ Erro ao salvar eleitor:", err);
+  }
+}
+
+/**
+ * ==============================
+ * 🧠 PROCESSAR MENSAGEM
+ * ==============================
+ */
+
+function extrairDados(mensagem) {
+  let campanha = "padrao";
+  let nome = "desconhecido";
+  let bairro = "nao informado";
+
+  if (mensagem.includes("quero_participar_")) {
+    const partes = mensagem.split("quero_participar_")[1].split("_");
+
+    campanha = partes[0] || "padrao";
+    nome = partes[1] || "desconhecido";
+    bairro = partes[2] || "nao informado";
+  }
+
+  return { campanha, nome, bairro };
+}
+
+/**
+ * ==============================
+ * 🤖 FLUXO POLÍTICO
+ * ==============================
+ */
+
+async function fluxoInicial(telefone) {
+  await enviarMensagem(telefone, `👋 Olá!
+
+Você entrou no canal oficial do candidato.
+
+Digite:
+
+1️⃣ Propostas
+2️⃣ Eventos
+3️⃣ Falar com a equipe`);
+}
+
+async function fluxoMenu(telefone, mensagem) {
+
+  if (mensagem === "1") {
+    await enviarMensagem(telefone, `📋 Nossas propostas:
+
+✔️ Saúde
+✔️ Segurança
+✔️ Educação`);
+  }
+
+  if (mensagem === "2") {
+    await enviarMensagem(telefone, `📅 Próximos eventos:
+
+📍 Sábado - Reunião
+📍 Domingo - Caminhada`);
+  }
+
+  if (mensagem === "3") {
+    await enviarMensagem(telefone, `👨‍💼 Nossa equipe entrará em contato com você!`);
+  }
+}
+
+/**
+ * ==============================
+ * 🔥 WEBHOOK
+ * ==============================
+ */
+
 app.post("/webhook", async (req, res) => {
-  res.sendStatus(200); // responde rápido
+  res.sendStatus(200);
 
   try {
-    console.log("Recebido:", JSON.stringify(req.body, null, 2));
-
     const data = req.body;
 
     if (!data.phone) {
-  console.log("❌ Telefone não recebido");
+      console.log("❌ Telefone não encontrado");
+      return;
+    }
+
+    const telefone = data.telefone || data.phone || data.from;
+
+if (!telefone) {
+  console.log("❌ Telefone não encontrado");
   return;
 }
-
-const telefone = data.phone;
     const mensagem = (
       data.text?.message ||
       data.text ||
@@ -76,94 +202,58 @@ const telefone = data.phone;
       ""
     ).toLowerCase().trim();
 
-    let empresa = "padrao";
-    let nome = "desconhecido";
+    console.log("📩 Recebido:", telefone, mensagem);
 
-    if (mensagem.includes("quero_cupom_")) {
-      const partes = mensagem.split("quero_cupom_")[1].split("_");
-      empresa = partes[0] || "padrao";
+    const { campanha, nome, bairro } = extrairDados(mensagem);
 
-      if (partes.length > 1) {
-        nome = partes.slice(1).join(" ");
-      }
-    }
-
-    // 🔥 SALVA NO FIREBASE
-    await fetch(getFirebaseUrl(empresa), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        fields: {
-          telefone: { stringValue: telefone },
-          empresa: { stringValue: empresa },
-          nome: { stringValue: nome },
-          origem: { stringValue: "whatsapp" },
-          campanha: { stringValue: "QR_FEIRA" },
-          data: { timestampValue: new Date().toISOString() }
-        }
-      })
+    // 💾 Salvar
+    await salvarEleitor({
+      telefone,
+      campanha,
+      nome,
+      bairro
     });
 
-    console.log("🔥 SALVO NO FIREBASE");
-
-    // 🚀 FLUXO
-    if (mensagem.includes("quero_cupom")) {
-
-      await enviarMensagem(telefone, `🎉 Bem-vindo(a) 👋
-
-Você quer conhecer melhor este produto?`);
-
-      await delay(1500);
-
-      await enviarMensagem(telefone, `🎁 Seu cupom:
-
-ALÉM DO CUPOM DE DESCONTO: RETORNEZAP10`);
-
-      await delay(1500);
-
-      await enviarMensagem(telefone, `📍 Digite:
-1️⃣ Quero conhecer melhor o sistema
-2️⃣ Quero adquirir o sistema
-3️⃣ Falar com comercial`);
+    // 🚀 Fluxo inicial
+    if (mensagem.includes("quero_participar")) {
+      await fluxoInicial(telefone);
+      return;
     }
 
-    // 🤖 MENU
-    if (mensagem === "1") {
-      await enviarMensagem(telefone, `🔥 Sistema incrivel de Captação de Leads (clientes não cadastrados)`);
-    }
-
-    if (mensagem === "2") {
-      await enviarMensagem(telefone, `📘 Menos de R$ 1,00 real por dia, valor mensal R$ 29,90`);
-    }
-
-    if (mensagem === "3") {
-      await enviarMensagem(telefone, `👨‍💼 Atendimento em instantes`);
-    }
+    // 🤖 Menu
+    await fluxoMenu(telefone, mensagem);
 
   } catch (err) {
-    console.error("Erro:", err);
+    console.error("❌ Erro geral:", err);
   }
 });
 
-// 🔥 START
-const PORT = process.env.PORT || 3000;
+/**
+ * ==============================
+ * 🧪 TESTE
+ * ==============================
+ */
 
-app.listen(PORT, () => {
-  console.log("🚀 Rodando na porta", PORT);
-});
-
-// 🔥 TESTE
 app.get("/teste", async (req, res) => {
-
   const telefone = req.query.tel;
 
   if (!telefone) {
-    return res.status(400).send("Informe o telefone ?tel=");
+    return res.status(400).send("Informe ?tel=");
   }
 
-  await enviarMensagem(telefone, "TESTE DIRETO 🚀");
+  await enviarMensagem(telefone, "🚀 Teste político funcionando!");
 
-  res.send(`Mensagem enviada para ${telefone}`);
+  res.send("OK");
+});
+
+/**
+ * ==============================
+ * 🚀 START
+ * ==============================
+ */
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("🚀 Servidor rodando na porta", PORT);
 });
